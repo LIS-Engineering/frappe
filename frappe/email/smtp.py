@@ -57,24 +57,30 @@ def get_outgoing_email_account(raise_exception_not_set=True, append_to=None, sen
 			# check if the sender has an email account with enable_outgoing
 			email_account = _get_email_account({"enable_outgoing": 1,
 					"email_id": sender_email_id})
-
 		if not email_account and append_to:
+			email_accounts = []
 			# append_to is only valid when enable_incoming is checked
-			email_accounts = frappe.db.get_values("Email Account", {
-				"enable_outgoing": 1,
-				"enable_incoming": 1,
-				"append_to": append_to,
-			}, cache=True)
+			email_names = [name.get("parent") for name in frappe.db.get_list("IMAP Folder",
+																			{"append_to": append_to}, "parent")]
+			if email_names:
+				email_accounts = frappe.db.get_values("Email Account", {
+					"enable_outgoing": 1,
+					"enable_incoming": 1,
+					"name": email_names,
+				}, cache=True)
 
 			if email_accounts:
 				_email_account = email_accounts[0]
 
 			else:
-				email_account = _get_email_account({
-					"enable_outgoing": 1,
-					"enable_incoming": 1,
-					"append_to": append_to
-				})
+				email_names = [name.get("parent") for name in frappe.db.get_list("IMAP Folder",
+																				{"append_to": append_to}, "parent")]
+				if email_names:
+					email_account = _get_email_account({
+						"enable_outgoing": 1,
+						"enable_incoming": 1,
+						"name": email_names,
+					})
 
 		if not email_account:
 			# sender don't have the outging email account

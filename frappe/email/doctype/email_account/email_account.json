@@ -20,12 +20,12 @@
   "mailbox_settings",
   "enable_incoming",
   "use_imap",
+  "imap_folder",
   "email_server",
   "use_ssl",
   "append_emails_to_sent_folder",
   "incoming_port",
   "attachment_limit",
-  "append_to",
   "default_incoming",
   "email_sync_option",
   "initial_sync_count",
@@ -57,8 +57,6 @@
   "set_footer",
   "footer",
   "brand_logo",
-  "uidvalidity",
-  "uidnext",
   "no_remaining",
   "no_failed"
  ],
@@ -203,17 +201,6 @@
    "hide_days": 1,
    "hide_seconds": 1,
    "label": "Attachment Limit (MB)"
-  },
-  {
-   "depends_on": "enable_incoming",
-   "description": "Append as communication against this DocType (must have fields, \"Status\", \"Subject\")",
-   "fieldname": "append_to",
-   "fieldtype": "Link",
-   "hide_days": 1,
-   "hide_seconds": 1,
-   "in_standard_filter": 1,
-   "label": "Append To",
-   "options": "DocType"
   },
   {
    "default": "0",
@@ -437,24 +424,6 @@
    "label": "Footer"
   },
   {
-   "fieldname": "uidvalidity",
-   "fieldtype": "Data",
-   "hidden": 1,
-   "hide_days": 1,
-   "hide_seconds": 1,
-   "label": "UIDVALIDITY",
-   "no_copy": 1
-  },
-  {
-   "fieldname": "uidnext",
-   "fieldtype": "Int",
-   "hidden": 1,
-   "hide_days": 1,
-   "hide_seconds": 1,
-   "label": "UIDNEXT",
-   "no_copy": 1
-  },
-  {
    "fieldname": "no_remaining",
    "fieldtype": "Data",
    "hidden": 1,
@@ -527,12 +496,19 @@
    "fieldname": "brand_logo",
    "fieldtype": "Attach Image",
    "label": "Brand Logo"
+  },
+  {
+   "depends_on": "eval: doc.use_imap && doc.enable_incoming",
+   "fieldname": "imap_folder",
+   "fieldtype": "Table",
+   "label": "IMAP Folder",
+   "options": "IMAP Folder"
   }
  ],
  "icon": "fa fa-inbox",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2021-01-21 10:05:24.820597",
+ "modified": "2021-03-08 13:40:39.240997",
  "modified_by": "Administrator",
  "module": "Email",
  "name": "Email Account",

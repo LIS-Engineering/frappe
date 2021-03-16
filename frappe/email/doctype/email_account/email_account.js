@@ -109,6 +109,15 @@ frappe.ui.form.on("Email Account", {
 	onload: function(frm) {
 		frm.set_df_property("append_to", "only_select", true);
 		frm.set_query("append_to", "frappe.email.doctype.email_account.email_account.get_append_to");
+		frm.set_query("append_to", "imap_folder", function () {
+			return {
+				query: "frappe.email.doctype.email_account.email_account.get_append_to"
+			};
+		});
+		if (frm.doc.__islocal) {
+			frm.add_child("imap_folder", {"folder_name": "INBOX"});
+			frm.refresh_field("imap_folder");
+		}
 	},
 
 	refresh: function(frm) {

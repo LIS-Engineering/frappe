@@ -84,11 +84,11 @@ class EmailAccount(Document):
 				frappe.throw(_("{0} is mandatory").format(self.meta.get_label("send_notification_to")))
 			for e in self.get_unreplied_notification_emails():
 				validate_email_address(e, True)
-
-		if self.enable_incoming and self.append_to:
-			valid_doctypes = [d[0] for d in get_append_to()]
-			if self.append_to not in valid_doctypes:
-				frappe.throw(_("Append To can be one of {0}").format(comma_or(valid_doctypes)))
+		for folder in self.imap_folder:
+			if self.enable_incoming and folder.append_to:
+				valid_doctypes = [d[0] for d in get_append_to()]
+				if folder.append_to not in valid_doctypes:
+					frappe.throw(_("Append To can be one of {0}").format(comma_or(valid_doctypes)))
 
 	def before_save(self):
 		messages = []
@@ -175,13 +175,13 @@ class EmailAccount(Document):
 			return None
 
 		args = frappe._dict({
+			"email_account_name": self.email_account_name,
 			"email_account": self.name,
 			"host": self.email_server,
 			"use_ssl": self.use_ssl,
 			"username": getattr(self, "login_id", None) or self.email_id,
 			"use_imap": self.use_imap,
 			"email_sync_rule": email_sync_rule,
-			"uid_validity": self.uidvalidity,
 			"incoming_port": get_port(self),
 			"initial_sync_count": self.initial_sync_count or 100
 		})
@@ -286,26 +286,68 @@ class EmailAccount(Document):
 	def get_failed_attempts_count(self):
 		return cint(frappe.cache().get('{0}:email-account-failed-attempts'.format(self.name)))
 
-	def receive(self, test_mails=None):
-		"""Called by scheduler to receive emails from this EMail account using POP3/IMAP."""
+	def process_mails(self, incoming_mails, email_server=None, uid_list=None, seen_status=None,
+						uid_reindexed=False, exceptions=None, folder="INBOX"):
 		def get_seen(status):
 			if not status:
 				return None
 			seen = 1 if status == "SEEN" else 0
 			return seen
 
+		for idx, msg in enumerate(incoming_mails):
+			uid = None if not uid_list else uid_list[idx]
+			self.flags.notify = True
+
+			try:
+				args = {
+					"uid": uid,
+					"seen": None if not seen_status else get_seen(seen_status.get(uid, None)),
+					"uid_reindexed": uid_reindexed,
+					"folder": folder,
+				}
+
+				communication = self.insert_communication(msg, args=args)
+
+			except SentEmailInInbox:
+				frappe.db.rollback()
+
+			except Exception:
+				frappe.db.rollback()
+				frappe.log_error('email_account.receive')
+				if self.use_imap:
+					self.handle_bad_emails(email_server, uid, msg, frappe.get_traceback())
+				exceptions.append(frappe.get_traceback())
+
+			else:
+				frappe.db.commit()
+				if communication and self.flags.notify:
+					# If email already exists in the system
+					# then do not send notifications for the same email.
+					attachments = []
+
+					if hasattr(communication, '_attachments'):
+						attachments = [d.file_name for d in communication._attachments]
+
+					communication.notify(attachments=attachments, fetched_from_email_account=True)
+
+		# notify if user is linked to account
+		if len(incoming_mails) > 0 and not frappe.local.flags.in_test:
+			frappe.publish_realtime('new_email', {"account": self.email_account_name, "number": len(incoming_mails)})
+
+		if exceptions:
+			raise Exception(frappe.as_json(exceptions))
+
+	def receive(self, test_mails=None):
+		"""Called by scheduler to receive emails from this EMail account using POP3/IMAP."""
 		if self.enable_incoming:
-			uid_list = []
-			exceptions = []
-			seen_status = []
-			uid_reindexed = False
 			email_server = None
 
 			if frappe.local.flags.in_test:
 				incoming_mails = test_mails or []
+				self.append_to = self.imap_folder[0].append_to
+				self.process_mails(incoming_mails)
 			else:
 				email_sync_rule = self.build_email_sync_rule()
-
 				try:
 					email_server = self.get_incoming_server(in_receive=True, email_sync_rule=email_sync_rule)
 				except Exception:
@@ -314,57 +356,26 @@ class EmailAccount(Document):
 				if not email_server:
 					return
 
-				emails = email_server.get_messages()
-				if not emails:
-					return
+				for folder in self.imap_folder:
+					self.folder_name = folder.folder_name
+					self.append_to = folder.append_to
+					email_server.settings['uid_validity'] = folder.get('uidvalidity')
+					email_server.select_imap_folder(self.folder_name)
+					emails = email_server.get_messages(self.folder_name)
 
-				incoming_mails = emails.get("latest_messages", [])
-				uid_list = emails.get("uid_list", [])
-				seen_status = emails.get("seen_status", [])
-				uid_reindexed = emails.get("uid_reindexed", False)
+					if not emails:
+						continue
 
-			for idx, msg in enumerate(incoming_mails):
-				uid = None if not uid_list else uid_list[idx]
-				self.flags.notify = True
+					incoming_mails = emails.get("latest_messages", [])
+					uid_list = emails.get("uid_list", [])
+					seen_status = emails.get("seen_status", [])
+					uid_reindexed = emails.get("uid_reindexed", False)
 
-				try:
-					args = {
-						"uid": uid,
-						"seen": None if not seen_status else get_seen(seen_status.get(uid, None)),
-						"uid_reindexed": uid_reindexed
-					}
-					communication = self.insert_communication(msg, args=args)
-
-				except SentEmailInInbox:
-					frappe.db.rollback()
-
-				except Exception:
-					frappe.db.rollback()
-					frappe.log_error('email_account.receive')
-					if self.use_imap:
-						self.handle_bad_emails(email_server, uid, msg, frappe.get_traceback())
-					exceptions.append(frappe.get_traceback())
-
-				else:
-					frappe.db.commit()
-					if communication and self.flags.notify:
-
-						# If email already exists in the system
-						# then do not send notifications for the same email.
-
-						attachments = []
-
-						if hasattr(communication, '_attachments'):
-							attachments = [d.file_name for d in communication._attachments]
-
-						communication.notify(attachments=attachments, fetched_from_email_account=True)
-
-			#notify if user is linked to account
-			if len(incoming_mails)>0 and not frappe.local.flags.in_test:
-				frappe.publish_realtime('new_email', {"account":self.email_account_name, "number":len(incoming_mails)})
-
-			if exceptions:
-				raise Exception(frappe.as_json(exceptions))
+					self.process_mails(incoming_mails, email_server, uid_list, seen_status, uid_reindexed,
+										folder=self.folder_name)
+					# mark Email Flag Queue mail as read
+					self.mark_emails_as_read_unread(email_server, self.folder_name)
+				email_server.logout_imap_folder()
 
 	def handle_bad_emails(self, email_server, uid, raw, reason):
 		if email_server and cint(email_server.settings.use_imap):
@@ -394,9 +405,14 @@ class EmailAccount(Document):
 			raw = msg
 			uid = -1
 			seen = 0
+			folder = "INBOX"
 		if isinstance(args, dict):
 			if args.get("uid", -1): uid = args.get("uid", -1)
 			if args.get("seen", 0): seen = args.get("seen", 0)
+			if args.get("folder"):
+				folder = args.get("folder")
+			else:
+				folder = "INBOX"
 
 		email = Email(raw)
 
@@ -441,6 +457,7 @@ class EmailAccount(Document):
 			"email_account": self.name,
 			"communication_medium": "Email",
 			"uid": int(uid or -1),
+			"imap_folder": folder,
 			"message_id": email.message_id,
 			"communication_date": email.date,
 			"has_attachment": 1 if email.attachments else 0,
@@ -491,11 +508,15 @@ class EmailAccount(Document):
 
 		parent = self.find_parent_from_in_reply_to(communication, email)
 
+		if not hasattr(self, 'append_to'):
+			self.append_to = frappe.db.get_value("IMAP Folder", {"parent": self.name}, "append_to")
+
 		if not parent and self.append_to:
 			self.set_sender_field_and_subject_field()
 
 		if not parent and self.append_to:
 			parent = self.find_parent_based_on_subject_and_sender(communication, email)
+
 
 		if not parent and self.append_to and self.append_to!="Communication":
 			parent = self.create_new_parent(communication, email)
@@ -550,6 +571,7 @@ class EmailAccount(Document):
 						self.subject_field: ("like", "%{0}%".format(subject)),
 						"creation": (">", (get_datetime() - relativedelta(days=60)).strftime(DATE_FORMAT))
 					}, fields = "name", limit = 1)
+
 
 				if not parent and len(subject) > 10 and is_system_user(email.from_email):
 					# match only subject field
@@ -688,23 +710,22 @@ class EmailAccount(Document):
 		else:
 			return self.email_sync_option or "UNSEEN"
 
-	def mark_emails_as_read_unread(self):
+	def mark_emails_as_read_unread(self, email_server=None, folder_name="INBOX"):
 		""" mark Email Flag Queue of self.email_account mails as read"""
-
 		if not self.use_imap:
 			return
 
-		flags = frappe.db.sql("""select name, communication, uid, action from
-			`tabEmail Flag Queue` where is_completed=0 and email_account={email_account}
-			""".format(email_account=frappe.db.escape(self.name)), as_dict=True)
+		flags = frappe.db.sql("""select name, communication, uid, action, imap_folder from
+			`tabEmail Flag Queue` where is_completed=0 and email_account={email_account} and imap_folder={folder_name}
+			""".format(email_account=frappe.db.escape(self.name),folder_name=frappe.db.escape(folder_name)), as_dict=True)
 
 		uid_list = { flag.get("uid", None): flag.get("action", "Read") for flag in flags }
 		if flags and uid_list:
-			email_server = self.get_incoming_server()
+			if not email_server:
+				email_server = self.get_incoming_server()
 			if not email_server:
 				return
-
-			email_server.update_flag(uid_list=uid_list)
+			email_server.update_flag(folder_name, uid_list=uid_list)
 
 			# mark communication as read
 			docnames =  ",".join([ "'%s'"%flag.get("communication") for flag in flags \
@@ -795,12 +816,13 @@ def notify_unreplied():
 
 	for email_account in frappe.get_all("Email Account", "name", filters={"enable_incoming": 1, "notify_if_unreplied": 1}):
 		email_account = frappe.get_doc("Email Account", email_account.name)
-		if email_account.append_to:
 
+		append_to = [folder.get("append_to") for folder in email_account.imap_folder]
+		if append_to:
 			# get open communications younger than x mins, for given doctype
 			for comm in frappe.get_all("Communication", "name", filters=[
 					{"sent_or_received": "Received"},
-					{"reference_doctype": email_account.append_to},
+					{"reference_doctype": ("in", append_to)},
 					{"unread_notification_sent": 0},
 					{"email_account":email_account.name},
 					{"creation": ("<", datetime.now() - timedelta(seconds = (email_account.unreplied_for_mins or 30) * 60))},
@@ -842,9 +864,6 @@ def pull_from_email_account(email_account):
 	'''Runs within a worker process'''
 	email_account = frappe.get_doc("Email Account", email_account)
 	email_account.receive()
-
-	# mark Email Flag Queue mail as read
-	email_account.mark_emails_as_read_unread()
 
 def get_max_email_uid(email_account):
 	# get maximum uid of emails

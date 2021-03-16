@@ -51,6 +51,7 @@
   "email_inbox",
   "message_id",
   "uid",
+  "imap_folder",
   "email_status",
   "has_attachment",
   "feedback_section",
@@ -197,7 +198,6 @@
    "label": "More Information"
   },
   {
-   "bold": 0,
    "default": "Now",
    "fieldname": "communication_date",
    "fieldtype": "Datetime",
@@ -382,12 +382,19 @@
    "label": "Timeline Links",
    "options": "Communication Link",
    "permlevel": 2
+  },
+  {
+   "fieldname": "imap_folder",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "IMAP Folder",
+   "read_only": 1
   }
  ],
  "icon": "fa fa-comment",
  "idx": 1,
  "links": [],
- "modified": "2019-12-27 14:44:04.880373",
+ "modified": "2021-03-17 13:22:07.581409",
  "modified_by": "Administrator",
  "module": "Core",
  "name": "Communication",
@@ -426,13 +433,13 @@
    "write": 1
   },
   {
-    "create": 1,
-    "delete": 1,
-    "email": 1,
-    "export":1,
-    "print":1,
-    "read": 1,
-    "role": "Inbox User"
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Inbox User"
   },
   {
    "delete": 1,

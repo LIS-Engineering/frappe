@@ -275,8 +275,10 @@ def set_incoming_outgoing_accounts(doc):
 			{"email_id": doc.sender, "enable_incoming": 1}, "email_id")
 
 	if not doc.incoming_email_account and doc.reference_doctype:
+		email_name = frappe.db.get_value("IMAP Folder",
+			{"append_to": doc.reference_doctype}, "parent")
 		doc.incoming_email_account = frappe.db.get_value("Email Account",
-			{"append_to": doc.reference_doctype, }, "email_id")
+			{"name": email_name}, "email_id")
 
 	if not doc.incoming_email_account:
 		doc.incoming_email_account = frappe.db.get_value("Email Account",
