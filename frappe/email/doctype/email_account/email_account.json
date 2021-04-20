@@ -26,6 +26,7 @@
   "append_emails_to_sent_folder",
   "incoming_port",
   "attachment_limit",
+  "append_to",
   "default_incoming",
   "email_sync_option",
   "initial_sync_count",
@@ -503,12 +504,21 @@
    "fieldtype": "Table",
    "label": "IMAP Folder",
    "options": "IMAP Folder"
+  },
+  {
+   "depends_on": "eval: !doc.use_imap && doc.enable_incoming",
+   "description": "Append as communication against this DocType (must have fields, \"Status\", \"Subject\")",
+   "fieldname": "append_to",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Append To",
+   "options": "DocType"
   }
  ],
  "icon": "fa fa-inbox",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2021-03-08 13:40:39.240997",
+ "modified": "2021-04-21 05:49:29.057625",
  "modified_by": "Administrator",
  "module": "Email",
  "name": "Email Account",
