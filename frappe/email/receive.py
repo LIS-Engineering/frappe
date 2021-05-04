@@ -108,7 +108,7 @@ class EmailServer:
 			self.pop.quit()
 		return
 
-	def get_messages(self, folder):
+	def get_messages(self, folder="INBOX"):
 		"""Returns new email messages in a list."""
 		if not self.check_mails():
 			return # nothing to do

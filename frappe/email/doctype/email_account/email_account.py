@@ -286,13 +286,24 @@ class EmailAccount(Document):
 	def get_failed_attempts_count(self):
 		return cint(frappe.cache().get('{0}:email-account-failed-attempts'.format(self.name)))
 
-	def process_mails(self, incoming_mails, email_server=None, uid_list=None, seen_status=None,
-						uid_reindexed=False, exceptions=None, folder="INBOX"):
+	def process_mails(self, emails=None, email_server=None, folder="INBOX"):
+		uid_list = []
+		exceptions = []
+		seen_status = []
+		uid_reindexed = False
+		incoming_mails = []
+
 		def get_seen(status):
 			if not status:
 				return None
 			seen = 1 if status == "SEEN" else 0
 			return seen
+
+		if emails:
+			uid_list = emails.get("uid_list", [])
+			seen_status = emails.get("seen_status", [])
+			uid_reindexed = emails.get("uid_reindexed", False)
+			incoming_mails = emails.get("latest_messages", [])
 
 		for idx, msg in enumerate(incoming_mails):
 			uid = None if not uid_list else uid_list[idx]
@@ -345,7 +356,7 @@ class EmailAccount(Document):
 			if frappe.local.flags.in_test:
 				incoming_mails = test_mails or []
 				self.append_to = self.imap_folder[0].append_to
-				self.process_mails(incoming_mails)
+				self.process_mails()
 			else:
 				email_sync_rule = self.build_email_sync_rule()
 				try:
@@ -356,25 +367,26 @@ class EmailAccount(Document):
 				if not email_server:
 					return
 
-				for folder in self.imap_folder:
-					self.folder_name = folder.folder_name
-					self.append_to = folder.append_to
-					email_server.settings['uid_validity'] = folder.get('uidvalidity')
-					email_server.select_imap_folder(self.folder_name)
-					emails = email_server.get_messages(self.folder_name)
+				if self.use_imap:
+					for folder in self.imap_folder:
+						self.folder_name = folder.folder_name
+						self.append_to = folder.append_to
+						email_server.settings['uid_validity'] = folder.get('uidvalidity')
+						email_server.select_imap_folder(self.folder_name)
+						emails = email_server.get_messages(folder=self.folder_name)
 
-					if not emails:
-						continue
+						if not emails:
+							continue
 
-					incoming_mails = emails.get("latest_messages", [])
-					uid_list = emails.get("uid_list", [])
-					seen_status = emails.get("seen_status", [])
-					uid_reindexed = emails.get("uid_reindexed", False)
+						self.process_mails(emails=emails, email_server=email_server, folder=self.folder_name)
+						# mark Email Flag Queue mail as read
+						self.mark_emails_as_read_unread(email_server, self.folder_name)
+				else:
+					# pop setup
+					emails = email_server.get_messages()
+					self.process_mails(emails=emails, email_server=email_server)
+					pass
 
-					self.process_mails(incoming_mails, email_server, uid_list, seen_status, uid_reindexed,
-										folder=self.folder_name)
-					# mark Email Flag Queue mail as read
-					self.mark_emails_as_read_unread(email_server, self.folder_name)
 				email_server.logout_imap_folder()
 
 	def handle_bad_emails(self, email_server, uid, raw, reason):
