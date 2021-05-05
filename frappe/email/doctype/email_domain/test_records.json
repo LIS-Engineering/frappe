@@ -19,7 +19,7 @@
   "email_id": "_test@test.com",
   "domain": "test.com",
   "email_server": "imap.test.com",
-  "use_imap": 1,
+  "use_imap": 0,
   "use_ssl": 0,
   "use_tls": 1,
   "incoming_port": "143",

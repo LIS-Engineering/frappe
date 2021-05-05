@@ -84,6 +84,7 @@ class EmailAccount(Document):
 				frappe.throw(_("{0} is mandatory").format(self.meta.get_label("send_notification_to")))
 			for e in self.get_unreplied_notification_emails():
 				validate_email_address(e, True)
+
 		for folder in self.imap_folder:
 			if self.enable_incoming and folder.append_to:
 				valid_doctypes = [d[0] for d in get_append_to()]
@@ -286,12 +287,15 @@ class EmailAccount(Document):
 	def get_failed_attempts_count(self):
 		return cint(frappe.cache().get('{0}:email-account-failed-attempts'.format(self.name)))
 
-	def process_mails(self, emails=None, email_server=None, folder="INBOX"):
+	def process_mails(self, emails=None, email_server=None, test_mails=None, folder="INBOX"):
 		uid_list = []
 		exceptions = []
 		seen_status = []
 		uid_reindexed = False
-		incoming_mails = []
+		if test_mails:
+			incoming_mails = test_mails or []
+		else:
+			incoming_mails = []
 
 		def get_seen(status):
 			if not status:
@@ -316,7 +320,6 @@ class EmailAccount(Document):
 					"uid_reindexed": uid_reindexed,
 					"folder": folder,
 				}
-
 				communication = self.insert_communication(msg, args=args)
 
 			except SentEmailInInbox:
@@ -352,11 +355,8 @@ class EmailAccount(Document):
 		"""Called by scheduler to receive emails from this EMail account using POP3/IMAP."""
 		if self.enable_incoming:
 			email_server = None
-
 			if frappe.local.flags.in_test:
-				incoming_mails = test_mails or []
-				self.append_to = self.imap_folder[0].append_to
-				self.process_mails()
+				self.process_mails(test_mails=test_mails)
 			else:
 				email_sync_rule = self.build_email_sync_rule()
 				try:
@@ -384,8 +384,8 @@ class EmailAccount(Document):
 				else:
 					# pop setup
 					emails = email_server.get_messages()
+					email_server.settings['uid_validity'] = self.uidvalidity
 					self.process_mails(emails=emails, email_server=email_server)
-					pass
 
 				email_server.logout_imap_folder()
 
@@ -825,11 +825,14 @@ def test_internet(host="8.8.8.8", port=53, timeout=3):
 def notify_unreplied():
 	"""Sends email notifications if there are unreplied Communications
 		and `notify_if_unreplied` is set as true."""
-
 	for email_account in frappe.get_all("Email Account", "name", filters={"enable_incoming": 1, "notify_if_unreplied": 1}):
 		email_account = frappe.get_doc("Email Account", email_account.name)
 
-		append_to = [folder.get("append_to") for folder in email_account.imap_folder]
+		if email_account.use_imap:
+			append_to = [folder.get("append_to") for folder in email_account.imap_folder]
+		else:
+			append_to = email_account.append_to
+
 		if append_to:
 			# get open communications younger than x mins, for given doctype
 			for comm in frappe.get_all("Communication", "name", filters=[

@@ -19,6 +19,7 @@
 		"send_notification_to": "test_unreplied@example.com",
 		"pop3_server": "pop.test.example.com",
 		"no_remaining":"0",
+		"append_to": "ToDo",
 		"imap_folder": [{"folder_name": "INBOX","append_to": "ToDo"}]
 	},
 	{

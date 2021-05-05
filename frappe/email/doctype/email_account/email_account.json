@@ -58,6 +58,8 @@
   "set_footer",
   "footer",
   "brand_logo",
+  "uidvalidity",
+  "uidnext",
   "no_remaining",
   "no_failed"
  ],
@@ -423,6 +425,20 @@
    "hide_days": 1,
    "hide_seconds": 1,
    "label": "Footer"
+  },
+  {
+   "fieldname": "uidvalidity",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "UIDVALIDITY",
+   "no_copy": 1
+  },
+  {
+   "fieldname": "uidnext",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "UIDNEXT",
+   "no_copy": 1
   },
   {
    "fieldname": "no_remaining",
