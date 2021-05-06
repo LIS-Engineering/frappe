@@ -29,20 +29,20 @@
   {
    "fieldname": "uidnext",
    "fieldtype": "Int",
-   "in_list_view": 1,
+   "hidden": 1,
    "label": "UIDNEXT"
   },
   {
    "fieldname": "uidvalidity",
    "fieldtype": "Data",
-   "in_list_view": 1,
+   "hidden": 1,
    "label": "UIDVALIDITY"
   }
  ],
  "idx": 1,
  "istable": 1,
  "links": [],
- "modified": "2021-05-05 15:13:09.612829",
+ "modified": "2021-05-06 11:38:00.705226",
  "modified_by": "Administrator",
  "module": "Email",
  "name": "IMAP Folder",
