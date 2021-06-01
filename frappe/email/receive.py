@@ -189,8 +189,9 @@ class EmailServer:
 			self.check_imap_uidvalidity(folder)
 
 			readonly = False if self.settings.email_sync_rule == "UNSEEN" else True
-
-			self.imap.select(folder, readonly=readonly)
+			print('##########################:',folder)
+			# self.imap.select(folder, readonly=readonly)
+			print(self.settings.email_sync_rule)
 			response, message = self.imap.uid('search', None, self.settings.email_sync_rule)
 			if message[0]:
 				email_list =  message[0].split()

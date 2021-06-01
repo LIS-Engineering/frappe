@@ -433,6 +433,8 @@ class EmailAccount(Document):
 		"""Called by scheduler to receive emails from this EMail account using POP3/IMAP."""
 		exceptions = []
 		inbound_mails = self.get_inbound_mails(test_mails=test_mails)
+		print("AFTER RETURN")
+		print("INBOUND MAILS:", inbound_mails)
 		for mail in inbound_mails:
 			try:
 				communication = mail.process()
@@ -480,17 +482,22 @@ class EmailAccount(Document):
 		email_sync_rule = self.build_email_sync_rule()
 		try:
 			email_server = self.get_incoming_server(in_receive=True, email_sync_rule=email_sync_rule)
-			messages = email_server.get_messages() or {}
+		# messages = email_server.get_messages() or {}
 		except Exception:
 			raise
 			frappe.log_error(title=_("Error while connecting to email account {0}").format(self.name))
 			return []
 
 		mails = []
-		for index, message in enumerate(messages.get("latest_messages", [])):
-			uid = messages['uid_list'][index]
-			seen_status = 1 if messages['seen_status'][uid]=='SEEN' else 0
-			mails.append(InboundMail(message, self, uid, seen_status))
+		for folder in self.imap_folder:
+			email_server.select_imap_folder(folder.folder_name)
+			email_server.settings['uid_validity'] = folder.uidvalidity
+			messages = email_server.get_messages(folder=folder.folder_name) or {}
+
+			for index, message in enumerate(messages.get("latest_messages", [])):
+				uid = messages['uid_list'][index]
+				seen_status = 1 if messages['seen_status'][uid]=='SEEN' else 0
+				mails.append(InboundMail(message, self, uid, seen_status))
 
 		return mails
 
@@ -695,8 +702,9 @@ def notify_unreplied():
 
 				# update flag
 				comm.db_set("unread_notification_sent", 1)
-
+@frappe.whitelist()
 def pull(now=False):
+	print("IN PULL POGU")
 	"""Will be called via scheduler, pull emails from all enabled Email accounts."""
 	if frappe.cache().get_value("workers:no-internet") == True:
 		if test_internet():
