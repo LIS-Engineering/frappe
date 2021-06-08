@@ -464,9 +464,6 @@ class EmailAccount(Document):
 		if exceptions:
 			raise Exception(frappe.as_json(exceptions))
 
-		# close connection to mailserver
-		email_server.logout_imap_folder()
-
 	def get_inbound_mails(self, test_mails=None):
 		"""retrive and return inbound mails.
 
@@ -501,6 +498,9 @@ class EmailAccount(Document):
 			# process the pop3 account
 			messages = email_server.get_messages() or {}
 			process_mail(messages)
+
+		# close connection to mailserver
+		email_server.logout_imap_folder()
 
 		return mails
 
