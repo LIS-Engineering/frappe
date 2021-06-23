@@ -460,6 +460,7 @@ class EmailAccount(Document):
 		"""retrive and return inbound mails.
 
 		"""
+		mails = []
 		def process_mail(messages):
 			for index, message in enumerate(messages.get("latest_messages", [])):
 				uid = messages['uid_list'][index] if messages.get('uid_list') else None
@@ -475,24 +476,22 @@ class EmailAccount(Document):
 		email_sync_rule = self.build_email_sync_rule()
 		try:
 			email_server = self.get_incoming_server(in_receive=True, email_sync_rule=email_sync_rule)
-			# messages = email_server.get_messages() or {}
+			if self.use_imap:
+				# process all given imap folder
+				for folder in self.imap_folder:
+					email_server.select_imap_folder(folder.folder_name)
+					email_server.settings['uid_validity'] = folder.uidvalidity
+					messages = email_server.get_messages(folder=folder.folder_name) or {}
+					process_mail(messages)
+			else:
+				# process the pop3 account
+				messages = email_server.get_messages() or {}
+				process_mail(messages)
+			# close connection to mailserver
+			email_server.logout_imap_folder()
 		except Exception:
 			frappe.log_error(title=_("Error while connecting to email account {0}").format(self.name))
 			return []
-
-		mails = []
-		if self.use_imap:
-			# process all given imap folder
-			for folder in self.imap_folder:
-				email_server.select_imap_folder(folder.folder_name)
-				email_server.settings['uid_validity'] = folder.uidvalidity
-		else:
-			# process the pop3 account
-			messages = email_server.get_messages() or {}
-			process_mail(messages)
-
-		# close connection to mailserver
-		email_server.logout_imap_folder()
 
 		return mails
 
